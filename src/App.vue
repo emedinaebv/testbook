@@ -129,10 +129,10 @@ const crearLibro = async () => {
           </div>
 
           <div class="form-group mt-3">
-            <label for="cantidad">Calidad del documento:</label>
+            <label for="calidad">Calidad del documento:</label>
             <div class="range-slider">
-              <span class="range-value">{{ cantidad }}</span>
-              <input type="range" class="form-control-range" v-model="cantidad" min="1" max="100" />
+              <span class="range-value">{{ calidad }}</span>
+              <input type="range" class="form-control-range" v-model="calidad" min="1" max="100" />
             </div>
           </div>
 
@@ -142,9 +142,15 @@ const crearLibro = async () => {
         </form>
 
         <div v-if="loading" class="flex-center mt-3">
-          <div>
-            <h4>Procesando PDF...</h4>
+          <div class="lds-spinner">
+            <div></div><div></div><div></div><div></div><div></div><div></div>
+            <div></div><div></div><div></div><div></div><div></div><div></div>
           </div>
+          <h4>Procesando PDF...</h4>
+        </div>
+
+        <div v-if="error" class="alert alert-danger mt-3">
+          {{ error }}
         </div>
 
         <div id="flipbook" class="mt-4"></div>
@@ -154,69 +160,114 @@ const crearLibro = async () => {
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, onMounted } from 'vue';
 
 const pdfFile = ref<File | null>(null);
 const loading = ref(false);
-const cantidad = ref(20);
+const calidad = ref(80);
+const error = ref('');
+
+// Cargar pdf.js dinámicamente
+const pdfjsLib = ref<any>(null);
+
+onMounted(async () => {
+  // Cargar pdf.js solo cuando sea necesario
+  pdfjsLib.value = await import('pdfjs-dist');
+  pdfjsLib.value.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js`;
+});
 
 const handleFileChange = (e: Event) => {
   const file = (e.target as HTMLInputElement).files?.[0] ?? null;
   pdfFile.value = file;
+  error.value = '';
 };
 
 const crearLibro = async () => {
-  if (!pdfFile.value) return alert('Selecciona un PDF primero.');
+  if (!pdfFile.value) {
+    error.value = 'Selecciona un PDF primero.';
+    return;
+  }
+
+  if (!pdfjsLib.value) {
+    error.value = 'PDF library no cargada. Recarga la página.';
+    return;
+  }
 
   loading.value = true;
+  error.value = '';
 
   try {
-    const formData = new FormData();
-    formData.append('file', pdfFile.value);
-    formData.append('calidad', cantidad.value.toString());
+    const arrayBuffer = await pdfFile.value.arrayBuffer();
+    const pdf = await pdfjsLib.value.getDocument({ data: arrayBuffer }).promise;
+    const numPages = pdf.numPages;
+    
+    const images: string[] = [];
 
-    const res = await fetch('/api/convertPdfToJpg', {
-      method: 'POST',
-      body: formData
-    });
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1.5 });
+      
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
 
-    if (!res.ok) throw new Error('Error al convertir PDF');
+      await page.render({
+        canvasContext: context!,
+        viewport: viewport
+      }).promise;
 
-    const { images } = await res.json();
+      const imageData = canvas.toDataURL('image/jpeg', calidad.value / 100);
+      const [, base64 = ''] = imageData.split(',');
+      images.push(base64); // Solo el base64
+    }
 
-    // Montar Turn.js / template3
-    await nextTick();
-    const flipbook = document.getElementById('flipbook');
-    if (!flipbook) return;
-
-    flipbook.innerHTML = ''; // limpiar
-
-    images.forEach((b64: string) => {
-      const page = document.createElement('div');
-      const img = document.createElement('img');
-      img.src = `data:image/jpeg;base64,${b64}`;
-      img.style.width = '100%';
-      page.appendChild(img);
-      flipbook.appendChild(page);
-    });
-
-    // Inicializa Turn.js (asegúrate de que esté importado globalmente)
-    // @ts-ignore
-    $(flipbook).turn({
-      width: 800,
-      height: 600,
-      autoCenter: true
-    });
-
-  } catch (err) {
-    console.error(err);
-    alert('Error al crear el libro');
+    await mostrarLibro(images);
+    
+  } catch (err: any) {
+    console.error('Error procesando PDF:', err);
+    error.value = `Error al procesar PDF: ${err.message}`;
   } finally {
     loading.value = false;
   }
 };
+
+const mostrarLibro = async (images: string[]) => {
+  await nextTick();
+  const flipbook = document.getElementById('flipbook');
+  if (!flipbook) return;
+
+  flipbook.innerHTML = '';
+
+  images.forEach((b64: string) => {
+    const page = document.createElement('div');
+    page.className = 'page';
+    const img = document.createElement('img');
+    img.src = `data:image/jpeg;base64,${b64}`;
+    img.style.width = '100%';
+    img.style.height = 'auto';
+    page.appendChild(img);
+    flipbook.appendChild(page);
+  });
+
+  // Inicializar Turn.js si está disponible
+  if ((window as any).$ && (window as any).$.fn.turn) {
+    (window as any).$(flipbook).turn({
+      width: 800,
+      height: 600,
+      autoCenter: true
+    });
+  }
+};
 </script>
 
+<style>
+/* Tus estilos existentes... */
+.page {
+  background: white;
+  border: 1px solid #ccc;
+}
+</style>
 
 
 
