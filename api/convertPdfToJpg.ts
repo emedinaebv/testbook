@@ -16,7 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (err) return res.status(500).json({ error: 'Error procesando PDF' });
 
     const filePath = (files.file as any).filepath;
-    const calidad = parseInt(fields.calidad as string) || 20;
+    const calidad = parseInt(fields.calidad as unknown as string) || 20;
     const outputDir = path.resolve('/tmp', 'images');
 
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
@@ -31,8 +31,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
 
       // Convertir todas las páginas automáticamente
-      const result = await storeAsImage.convertBulk(-1); // -1 significa "todas las páginas"
+      const result = await storeAsImage.bulk(-1); // -1 significa "todas las páginas"
       const base64Array: string[] = result.map(r => {
+        if (!r.path) throw new Error('Missing image path in pdf2pic result');
         const buffer = fs.readFileSync(r.path);
         fs.rmSync(r.path, { force: true }); // limpiar JPG temporal
         return buffer.toString('base64');
