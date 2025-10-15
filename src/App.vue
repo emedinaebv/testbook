@@ -146,7 +146,7 @@ const crearLibro = async () => {
             <div></div><div></div><div></div><div></div><div></div><div></div>
             <div></div><div></div><div></div><div></div><div></div><div></div>
           </div>
-          <h4>Procesando PDF...</h4>
+          <h4>Procesando PDF... {{ progreso }}</h4>
         </div>
 
         <div v-if="error" class="alert alert-danger mt-3">
@@ -166,14 +166,24 @@ const pdfFile = ref<File | null>(null);
 const loading = ref(false);
 const calidad = ref(80);
 const error = ref('');
-
-// Cargar pdf.js dinámicamente
+const progreso = ref('');
 const pdfjsLib = ref<any>(null);
 
+// Configurar PDF.js correctamente
 onMounted(async () => {
-  // Cargar pdf.js solo cuando sea necesario
-  pdfjsLib.value = await import('pdfjs-dist');
-  pdfjsLib.value.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js`;
+  try {
+    // Importar pdfjs-dist con la versión correcta
+    pdfjsLib.value = await import('pdfjs-dist');
+    
+    // Usar la versión compatible del worker
+    const pdfjsWorker = await import('pdfjs-dist/build/pdf.worker.min?url');
+    pdfjsLib.value.GlobalWorkerOptions.workerSrc = pdfjsWorker.default;
+    
+    console.log('PDF.js cargado correctamente');
+  } catch (err) {
+    console.error('Error cargando PDF.js:', err);
+    error.value = 'Error al cargar el visor de PDF';
+  }
 });
 
 const handleFileChange = (e: Event) => {
@@ -195,31 +205,53 @@ const crearLibro = async () => {
 
   loading.value = true;
   error.value = '';
+  progreso.value = '';
 
   try {
     const arrayBuffer = await pdfFile.value.arrayBuffer();
-    const pdf = await pdfjsLib.value.getDocument({ data: arrayBuffer }).promise;
-    const numPages = pdf.numPages;
     
+    // Cargar el PDF
+    const pdf = await pdfjsLib.value.getDocument({ 
+      data: arrayBuffer,
+      // Opciones para mejor compatibilidad
+      cMapUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/',
+      cMapPacked: true
+    }).promise;
+    
+    const numPages = pdf.numPages;
     const images: string[] = [];
 
+    console.log(`Procesando ${numPages} páginas...`);
+
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      progreso.value = `Página ${pageNum} de ${numPages}`;
+      
       const page = await pdf.getPage(pageNum);
-      const viewport = page.getViewport({ scale: 1.5 });
+      const viewport = page.getViewport({ scale: 2.0 }); // Mayor escala para mejor calidad
       
       const canvas = document.createElement('canvas');
       const context = canvas.getContext('2d');
+      if (!context) {
+        throw new Error('No se pudo obtener el contexto del canvas');
+      }
+
       canvas.height = viewport.height;
       canvas.width = viewport.width;
 
-      await page.render({
-        canvasContext: context!,
+      const renderContext = {
+        canvasContext: context,
         viewport: viewport
-      }).promise;
+      };
 
+      await page.render(renderContext).promise;
+
+      // Convertir a JPEG con la calidad seleccionada
       const imageData = canvas.toDataURL('image/jpeg', calidad.value / 100);
-      const [, base64 = ''] = imageData.split(',');
-      images.push(base64); // Solo el base64
+      images.push(imageData.split(',')[1]); // Solo el base64
+
+      // Limpiar canvas
+      canvas.width = 0;
+      canvas.height = 0;
     }
 
     await mostrarLibro(images);
@@ -229,45 +261,59 @@ const crearLibro = async () => {
     error.value = `Error al procesar PDF: ${err.message}`;
   } finally {
     loading.value = false;
+    progreso.value = '';
   }
 };
 
 const mostrarLibro = async (images: string[]) => {
   await nextTick();
   const flipbook = document.getElementById('flipbook');
-  if (!flipbook) return;
+  if (!flipbook) {
+    error.value = 'No se encontró el contenedor del libro';
+    return;
+  }
 
   flipbook.innerHTML = '';
 
-  images.forEach((b64: string) => {
+  images.forEach((b64: string, index: number) => {
     const page = document.createElement('div');
     page.className = 'page';
+    page.style.background = 'white';
+    page.style.border = '1px solid #ccc';
+    page.style.padding = '10px';
+    
     const img = document.createElement('img');
     img.src = `data:image/jpeg;base64,${b64}`;
     img.style.width = '100%';
     img.style.height = 'auto';
+    img.style.maxWidth = '100%';
+    img.alt = `Página ${index + 1}`;
+    
     page.appendChild(img);
     flipbook.appendChild(page);
   });
 
   // Inicializar Turn.js si está disponible
-  if ((window as any).$ && (window as any).$.fn.turn) {
+  if (typeof window !== 'undefined' && (window as any).$ && (window as any).$.fn.turn) {
     (window as any).$(flipbook).turn({
       width: 800,
       height: 600,
-      autoCenter: true
+      autoCenter: true,
+      elevation: 50,
+      gradients: true,
+      duration: 1000
     });
+  } else {
+    console.warn('Turn.js no está disponible. Mostrando páginas simples.');
+    // Estilo alternativo si Turn.js no está disponible
+    flipbook.style.display = 'flex';
+    flipbook.style.flexDirection = 'column';
+    flipbook.style.gap = '10px';
   }
 };
 </script>
 
-<style>
-/* Tus estilos existentes... */
-.page {
-  background: white;
-  border: 1px solid #ccc;
-}
-</style>
+
 
 
 
