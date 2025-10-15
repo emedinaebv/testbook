@@ -1,117 +1,4 @@
-<!-- <script setup lang="ts">
-import { ref } from 'vue'
-
-const pdfFile = ref<File | null>(null)
-const loading = ref(false)
-const cantidad = ref(20)
-
-// Captura el archivo PDF seleccionado
-const handleFileChange = (event: any) => {
-  const file = event.target.files[0]
-  if (file) {
-    pdfFile.value = file
-  }
-}
-
-// Función que llama a la API /api/convertPdfToJpg
-const crearLibro = async () => {
-  if (!pdfFile.value) {
-    console.error('No se ha seleccionado un archivo PDF.')
-    return
-  }
-
-  loading.value = true
-  try {
-    // Preparamos el archivo para enviarlo al backend
-    const formData = new FormData()
-    formData.append('file', pdfFile.value)
-    formData.append('calidad', cantidad.value.toString())
-
-    // Llamada al endpoint de Vercel
-    const response = await fetch('/api/convertPdfToJpg', {
-      method: 'POST',
-      body: formData
-    })
-
-    if (!response.ok) throw new Error('Error en la conversión')
-
-    const data = await response.json()
-    console.log('✅ Imágenes generadas:', data.images)
-
-    // Ejemplo: mostrar la primera imagen en base64
-    // (solo si quieres ver el resultado en el navegador)
-    const img = document.createElement('img')
-    img.src = `data:image/jpeg;base64,${data.images[0]}`
-    document.body.appendChild(img)
-  } catch (error) {
-    console.error('Error al convertir el PDF:', error)
-  } finally {
-    loading.value = false
-  }
-}
-</script>
-
-
-
-
-
-<template>
-
-  <div class="container mt-5">
-    <div>
-      <img src="../logo.png" class="logo" />
-    </div>
-    <div class="row">
-      <div class="col-md-5 mx-auto">
-        <h3 class="text-center mb-4" style="font-size:larger;">Caja de Introducción de PDF</h3>
-        <form>
-          <div class="form-group">
-            <label for="pdfFile">Seleccionar archivo PDF</label>
-            <div>
-              <input type="file" class="form-control" id="pdfFile" accept=".pdf" @change="handleFileChange" />
-            </div>
-          </div>
-          <div class="form-group">
-            <label for="cantidad">Calidad del documento:</label>
-            <div class="range-slider">
-              <span class="range-value">{{ cantidad }}</span>
-              <input type="range" class="form-control-range" id="cantidad" v-model="cantidad" min="1" max="100" />
-            </div>
-          </div>
-
-          <button type="button" class="btn btn-primary" @click="crearLibro" v-if="!loading && pdfFilePath">Crear
-            libro</button>
-        </form>
-
-        <div v-if="loading" class="flex-center">
-          <div>
-            <h1>Creando libro</h1>
-          </div>
-          <div class="lds-spinner">
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-            <div></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-
-
-
-</template> -->
-
-
+<!-- 
 <template>
   <div class="container mt-5">
     <div>
@@ -457,5 +344,313 @@ body {
 
 .form-control-range {
   width: 100%;
+}
+</style> -->
+
+
+
+<template>
+  <div class="container mt-5">
+    <div>
+      <img src="../logo.png" class="logo"/>
+    </div>
+
+    <div class="row">
+      <div class="col-md-8 mx-auto">
+        <h3 class="text-center mb-4" style="font-size:larger;">Convertidor PDF a Libro Digital</h3>
+        
+        <form @submit.prevent="crearLibro">
+          <div class="form-group mb-3">
+            <label for="pdfFile" class="form-label">Seleccionar archivo PDF</label>
+            <input type="file" class="form-control" id="pdfFile" accept=".pdf" @change="handleFileChange" />
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="calidad" class="form-label">Calidad del documento: {{ calidad }}%</label>
+            <input type="range" class="form-range" v-model="calidad" min="1" max="100" />
+          </div>
+
+          <button type="submit" class="btn btn-primary w-100" :disabled="loading || !pdfFile">
+            {{ loading ? 'Procesando...' : 'Crear Libro Digital' }}
+          </button>
+        </form>
+
+        <div v-if="loading" class="text-center mt-4">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Cargando...</span>
+          </div>
+          <p class="mt-2">{{ progreso }}</p>
+        </div>
+
+        <div v-if="error" class="alert alert-danger mt-3" role="alert">
+          {{ error }}
+        </div>
+
+        <!-- Contenedor del flipbook -->
+        <div v-if="images.length > 0" class="mt-5">
+          <h4 class="text-center mb-3">Tu Libro Digital</h4>
+          <div id="flipbook" class="mx-auto">
+            <div v-for="(image, index) in images" :key="index" class="page">
+              <img :src="'data:image/jpeg;base64,' + image" :alt="'Página ' + (index + 1)" />
+            </div>
+          </div>
+          
+          <!-- Controles de navegación -->
+          <div class="text-center mt-3">
+            <button @click="previousPage" class="btn btn-outline-primary me-2" :disabled="currentPage <= 1">
+              Anterior
+            </button>
+            <span class="mx-3">Página {{ currentPage }} de {{ images.length }}</span>
+            <button @click="nextPage" class="btn btn-outline-primary ms-2" :disabled="currentPage >= images.length">
+              Siguiente
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, nextTick } from 'vue';
+
+const pdfFile = ref<File | null>(null);
+const loading = ref(false);
+const calidad = ref(80);
+const error = ref('');
+const progreso = ref('');
+const images = ref<string[]>([]);
+const currentPage = ref(1);
+const turnJsLoaded = ref(false);
+
+// Cargar Turn.js dinámicamente
+onMounted(async () => {
+  await loadTurnJS();
+});
+
+const loadTurnJS = (): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if (typeof window !== 'undefined' && (window as any).$ && (window as any).$.fn.turn) {
+      turnJsLoaded.value = true;
+      resolve();
+      return;
+    }
+
+    // Cargar jQuery si no existe
+    if (typeof window !== 'undefined' && !(window as any).jQuery) {
+      const jqueryScript = document.createElement('script');
+      jqueryScript.src = 'https://code.jquery.com/jquery-3.6.0.min.js';
+      jqueryScript.onload = () => {
+        loadTurnCore();
+      };
+      jqueryScript.onerror = () => {
+        console.warn('No se pudo cargar jQuery, usando modo simple');
+        resolve();
+      };
+      document.head.appendChild(jqueryScript);
+    } else {
+      loadTurnCore();
+    }
+
+    function loadTurnCore() {
+      const turnScript = document.createElement('script');
+      turnScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/turn.js/4.1.1/turn.min.js';
+      turnScript.onload = () => {
+        turnJsLoaded.value = true;
+        console.log('Turn.js cargado correctamente');
+        resolve();
+      };
+      turnScript.onerror = () => {
+        console.warn('No se pudo cargar Turn.js, usando modo simple');
+        resolve();
+      };
+      document.head.appendChild(turnScript);
+    }
+  });
+};
+
+const handleFileChange = (e: Event) => {
+  const file = (e.target as HTMLInputElement).files?.[0] ?? null;
+  pdfFile.value = file;
+  error.value = '';
+  images.value = [];
+};
+
+const crearLibro = async () => {
+  if (!pdfFile.value) {
+    error.value = 'Selecciona un PDF primero.';
+    return;
+  }
+
+  loading.value = true;
+  error.value = '';
+  images.value = [];
+
+  try {
+    const arrayBuffer = await pdfFile.value.arrayBuffer();
+    
+    // Usar PDF.js directamente desde CDN para evitar problemas de versión
+    const pdfjsLib = await import('pdfjs-dist');
+    const pdfjsWorker = await import('pdfjs-dist/build/pdf.worker.min?url');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker.default;
+    
+    const pdf = await pdfjsLib.getDocument({ 
+      data: arrayBuffer 
+    }).promise;
+    
+    const numPages = pdf.numPages;
+    const convertedImages: string[] = [];
+
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      progreso.value = `Procesando página ${pageNum} de ${numPages}`;
+      
+      const page = await pdf.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1.5 });
+      
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (!context) {
+        throw new Error('No se pudo obtener el contexto del canvas');
+      }
+
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+
+      await page.render({
+        canvas,
+        viewport
+      }).promise;
+
+      const imageData = canvas.toDataURL('image/jpeg', calidad.value / 100);
+      const parts = imageData.split(',');
+      if (parts.length < 2 || !parts[1]) {
+        throw new Error('Formato de imagen inesperado al convertir a base64');
+      }
+      convertedImages.push(parts[1]);
+    }
+
+    images.value = convertedImages;
+    await nextTick();
+    await initializeFlipbook();
+    
+  } catch (err: any) {
+    console.error('Error procesando PDF:', err);
+    error.value = `Error al procesar PDF: ${err.message}`;
+  } finally {
+    loading.value = false;
+    progreso.value = '';
+  }
+};
+
+const initializeFlipbook = async () => {
+  const flipbook = document.getElementById('flipbook');
+  if (!flipbook) return;
+
+  // Esperar a que Turn.js esté cargado
+  if (!turnJsLoaded.value) {
+    await loadTurnJS();
+  }
+
+  if (turnJsLoaded.value && (window as any).$ && (window as any).$.fn.turn) {
+    try {
+      (window as any).$(flipbook).turn({
+        width: 800,
+        height: 600,
+        autoCenter: true,
+        duration: 1000,
+        when: {
+          turning: (event: any, page: number) => {
+            currentPage.value = page;
+          }
+        }
+      });
+      console.log('Flipbook inicializado con Turn.js');
+    } catch (err) {
+      console.warn('Error inicializando Turn.js:', err);
+      setupSimpleView();
+    }
+  } else {
+    setupSimpleView();
+  }
+};
+
+const setupSimpleView = () => {
+  console.log('Usando vista simple de páginas');
+  const flipbook = document.getElementById('flipbook');
+  if (flipbook) {
+    flipbook.style.display = 'grid';
+    flipbook.style.gridTemplateColumns = 'repeat(auto-fit, minmax(300px, 1fr))';
+    flipbook.style.gap = '10px';
+    flipbook.style.padding = '20px';
+  }
+};
+
+const nextPage = () => {
+  if (currentPage.value < images.value.length) {
+    currentPage.value++;
+    navigateToPage(currentPage.value);
+  }
+};
+
+const previousPage = () => {
+  if (currentPage.value > 1) {
+    currentPage.value--;
+    navigateToPage(currentPage.value);
+  }
+};
+
+const navigateToPage = (pageNumber: number) => {
+  const flipbook = document.getElementById('flipbook');
+  if (flipbook && (window as any).$ && (window as any).$.fn.turn) {
+    (window as any).$(flipbook).turn('page', pageNumber);
+  }
+};
+</script>
+
+<style scoped>
+.logo {
+  height: 9em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+
+#flipbook {
+  width: 800px;
+  height: 600px;
+  margin: 0 auto;
+  background: #f0f0f0;
+  border: 1px solid #ccc;
+  box-shadow: 0 0 20px rgba(0,0,0,0.2);
+}
+
+.page {
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page img {
+  max-width: 95%;
+  max-height: 95%;
+  object-fit: contain;
+}
+
+/* Estilos para el modo simple (sin Turn.js) */
+#flipbook[style*="grid"] .page {
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  padding: 10px;
+  background: white;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  #flipbook {
+    width: 100%;
+    height: 400px;
+  }
 }
 </style>
