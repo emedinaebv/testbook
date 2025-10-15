@@ -246,8 +246,16 @@ const crearLibro = async () => {
       await page.render(renderContext).promise;
 
       // Convertir a JPEG con la calidad seleccionada
-      const imageData = canvas.toDataURL('image/jpeg', calidad.value / 100);
-      images.push(imageData.split(',')[1]); // Solo el base64
+            const imageData = canvas.toDataURL('image/jpeg', calidad.value / 100);
+            const parts = imageData.split(',');
+            if (parts.length < 2) {
+              throw new Error('Formato de imagen inesperado al convertir a base64');
+            }
+            const base64 = parts[1];
+            if (!base64) {
+              throw new Error('Formato de imagen inesperado: base64 vacío');
+            }
+            images.push(base64); // Solo el base64
 
       // Limpiar canvas
       canvas.width = 0;
