@@ -17,37 +17,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const filePath = (files.file as any).filepath;
     const calidad = parseInt(fields.calidad as string) || 20;
-    const nombreSalida = path.basename(filePath, '.pdf');
     const outputDir = path.resolve('/tmp', 'images');
 
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
     try {
-      // Configuración pdf2pic
       const storeAsImage = fromPath(filePath, {
         density: 100,
         savePath: outputDir,
         format: 'jpeg',
         width: 1920,
-        height: 0, // altura automática proporcional
-        quality: calidad
+        quality: calidad,
       });
 
-      const pdfPages = JSON.parse(
-        require('child_process')
-          .execSync(`pdfinfo "${filePath}" | grep Pages | awk '{print $2}'`)
-          .toString()
-      ) || 1;
-
-      const base64Array: string[] = [];
-
-      // Convertir todas las páginas
-      for (let i = 1; i <= pdfPages; i++) {
-        const result = await storeAsImage(i);
-        const imgBuffer = fs.readFileSync(result.path);
-        base64Array.push(imgBuffer.toString('base64'));
-        fs.rmSync(result.path, { force: true }); // limpiar JPG temporal
-      }
+      // Convertir todas las páginas automáticamente
+      const result = await storeAsImage.convertBulk(-1); // -1 significa "todas las páginas"
+      const base64Array: string[] = result.map(r => {
+        const buffer = fs.readFileSync(r.path);
+        fs.rmSync(r.path, { force: true }); // limpiar JPG temporal
+        return buffer.toString('base64');
+      });
 
       fs.rmSync(filePath, { force: true }); // limpiar PDF temporal
       res.status(200).json({ images: base64Array });
