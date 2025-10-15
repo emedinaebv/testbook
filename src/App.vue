@@ -349,7 +349,7 @@ body {
 
 
 
-<template>
+<!-- <template>
   <div class="container mt-5">
     <div>
       <img src="../logo.png" class="logo"/>
@@ -386,7 +386,7 @@ body {
           {{ error }}
         </div>
 
-        <!-- Contenedor del flipbook -->
+      
         <div v-if="images.length > 0" class="mt-5">
           <h4 class="text-center mb-3">Tu Libro Digital</h4>
           <div id="flipbook" class="mx-auto">
@@ -395,7 +395,7 @@ body {
             </div>
           </div>
           
-          <!-- Controles de navegación -->
+  
           <div class="text-center mt-3">
             <button @click="previousPage" class="btn btn-outline-primary me-2" :disabled="currentPage <= 1">
               Anterior
@@ -605,9 +605,9 @@ const navigateToPage = (pageNumber: number) => {
     (window as any).$(flipbook).turn('page', pageNumber);
   }
 };
-</script>
+</script> -->
 
-<style scoped>
+<!-- <style scoped>
 .logo {
   height: 9em;
   padding: 1.5em;
@@ -652,5 +652,796 @@ const navigateToPage = (pageNumber: number) => {
     width: 100%;
     height: 400px;
   }
+}
+</style> -->
+
+
+<template>
+  <div class="container mt-5">
+    <div class="text-center mb-4">
+      <img src="../logo.png" class="logo" alt="Logo" />
+    </div>
+
+    <div class="row">
+      <div class="col-md-8 mx-auto">
+        <h3 class="text-center mb-4" style="font-size: larger;">Convertidor PDF a Libro Digital</h3>
+        
+        <form @submit.prevent="crearLibro" class="card p-4 shadow-sm">
+          <div class="form-group mb-3">
+            <label for="pdfFile" class="form-label fw-bold">Seleccionar archivo PDF</label>
+            <input 
+              type="file" 
+              class="form-control" 
+              id="pdfFile" 
+              accept=".pdf" 
+              @change="handleFileChange"
+              :disabled="loading"
+            />
+            <div class="form-text">Selecciona un archivo PDF para convertirlo en libro digital</div>
+          </div>
+
+          <div class="form-group mb-4">
+            <label for="calidad" class="form-label fw-bold">
+              Calidad del documento: <span class="text-primary">{{ calidad }}%</span>
+            </label>
+            <input 
+              type="range" 
+              class="form-range" 
+              v-model="calidad" 
+              min="30" 
+              max="100" 
+              :disabled="loading"
+            />
+            <div class="d-flex justify-content-between text-muted small">
+              <span>Baja calidad</span>
+              <span>Alta calidad</span>
+            </div>
+          </div>
+
+          <button 
+            type="submit" 
+            class="btn btn-primary w-100 py-2 fw-bold" 
+            :disabled="loading || !pdfFile"
+          >
+            <span v-if="loading">
+              <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+              Procesando PDF...
+            </span>
+            <span v-else>
+              🎨 Crear Libro Digital
+            </span>
+          </button>
+        </form>
+
+        <!-- Indicador de progreso -->
+        <div v-if="loading" class="alert alert-info mt-3 text-center">
+          <div class="spinner-border text-primary me-2" role="status"></div>
+          <strong>{{ progreso }}</strong>
+        </div>
+
+        <!-- Mensaje de error -->
+        <div v-if="error" class="alert alert-danger mt-3" role="alert">
+          <strong>Error:</strong> {{ error }}
+        </div>
+
+        <!-- Vista del libro digital -->
+        <div v-if="images.length > 0" class="mt-5">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h4 class="text-primary mb-0">Tu Libro Digital</h4>
+            <span class="badge bg-primary fs-6">{{ images.length }} página{{ images.length !== 1 ? 's' : '' }}</span>
+          </div>
+          
+          <!-- Navegación principal -->
+          <div class="navigation-controls mb-4">
+            <button 
+              @click="previousPage" 
+              class="btn btn-outline-primary btn-lg" 
+              :disabled="currentPage <= 1"
+            >
+              ‹‹ Anterior
+            </button>
+            
+            <div class="page-indicator">
+              <span class="fw-bold fs-5">{{ currentPage }} / {{ images.length }}</span>
+            </div>
+            
+            <button 
+              @click="nextPage" 
+              class="btn btn-outline-primary btn-lg" 
+              :disabled="currentPage >= images.length"
+            >
+              Siguiente ››
+            </button>
+          </div>
+
+          <!-- Área de visualización de páginas -->
+          <div class="flipbook-simple">
+            <div 
+              v-for="(image, index) in images" 
+              :key="index" 
+              class="page-simple"
+              :class="{ 
+                'active': currentPage === index + 1,
+                'page-even': (index + 1) % 2 === 0,
+                'page-odd': (index + 1) % 2 === 1
+              }"
+              :id="'page-' + (index + 1)"
+            >
+              <div class="page-header">
+                <span class="page-number">Página {{ index + 1 }}</span>
+                <span class="document-title">{{ pdfFileName }}</span>
+              </div>
+              <div class="page-content">
+                <img 
+                  :src="'data:image/jpeg;base64,' + image" 
+                  :alt="'Página ' + (index + 1)"
+                  @load="onImageLoad"
+                  @error="onImageError"
+                />
+              </div>
+              <div class="page-footer">
+                <small class="text-muted">Generado con PDF to Flipbook</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Navegación inferior -->
+          <div class="navigation-controls mt-4">
+            <button 
+              @click="firstPage" 
+              class="btn btn-outline-secondary" 
+              :disabled="currentPage <= 1"
+            >
+              Primera
+            </button>
+            
+            <button 
+              @click="previousPage" 
+              class="btn btn-outline-primary" 
+              :disabled="currentPage <= 1"
+            >
+              ‹ Anterior
+            </button>
+            
+            <div class="page-indicator">
+              <span class="fw-bold">{{ currentPage }} de {{ images.length }}</span>
+            </div>
+            
+            <button 
+              @click="nextPage" 
+              class="btn btn-outline-primary" 
+              :disabled="currentPage >= images.length"
+            >
+              Siguiente ›
+            </button>
+            
+            <button 
+              @click="lastPage" 
+              class="btn btn-outline-secondary" 
+              :disabled="currentPage >= images.length"
+            >
+              Última
+            </button>
+          </div>
+
+          <!-- Miniaturas -->
+          <div class="thumbnails-section mt-5">
+            <h6 class="text-center mb-3 text-muted">Navegación rápida</h6>
+            <div class="thumbnails">
+              <div 
+                v-for="(image, index) in images" 
+                :key="'thumb-' + index"
+                class="thumbnail"
+                :class="{ 
+                  'active': currentPage === index + 1,
+                  'viewed': viewedPages.includes(index + 1)
+                }"
+                @click="goToPage(index + 1)"
+              >
+                <div class="thumbnail-image-container">
+                  <img 
+                    :src="'data:image/jpeg;base64,' + image" 
+                    :alt="'Página ' + (index + 1)"
+                    loading="lazy"
+                  />
+                  <div class="thumbnail-overlay">
+                    <span class="thumbnail-number">{{ index + 1 }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Botones de acción -->
+          <div class="action-buttons mt-4 text-center">
+            <button @click="descargarImagen" class="btn btn-success me-2">
+              📥 Descargar Página Actual
+            </button>
+            <button @click="reiniciar" class="btn btn-outline-secondary">
+              🔄 Nuevo PDF
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
+
+// Variables reactivas
+const pdfFile = ref<File | null>(null);
+const pdfFileName = ref<string>('');
+const loading = ref(false);
+const calidad = ref(80);
+const error = ref('');
+const progreso = ref('');
+const images = ref<string[]>([]);
+const currentPage = ref(1);
+const viewedPages = ref<number[]>([]);
+const pdfjsLib = ref<any>(null);
+
+// Inicializar PDF.js
+onMounted(async () => {
+  try {
+    // Cargar PDF.js dinámicamente
+    pdfjsLib.value = await import('pdfjs-dist');
+    const pdfjsWorker = await import('pdfjs-dist/build/pdf.worker.min?url');
+    pdfjsLib.value.GlobalWorkerOptions.workerSrc = pdfjsWorker.default;
+    console.log('PDF.js inicializado correctamente');
+  } catch (err) {
+    console.error('Error cargando PDF.js:', err);
+    error.value = 'Error al inicializar el visor de PDF';
+  }
+});
+
+// Manejar selección de archivo
+const handleFileChange = (e: Event) => {
+  const file = (e.target as HTMLInputElement).files?.[0] ?? null;
+  if (file && file.type === 'application/pdf') {
+    pdfFile.value = file;
+    pdfFileName.value = file.name.replace('.pdf', '');
+    error.value = '';
+    images.value = [];
+    currentPage.value = 1;
+    viewedPages.value = [];
+  } else if (file) {
+    error.value = 'Por favor, selecciona un archivo PDF válido.';
+  }
+};
+
+// Crear libro digital
+const crearLibro = async () => {
+  if (!pdfFile.value) {
+    error.value = 'Selecciona un PDF primero.';
+    return;
+  }
+
+  if (!pdfjsLib.value) {
+    error.value = 'El visor de PDF no está cargado. Recarga la página.';
+    return;
+  }
+
+  loading.value = true;
+  error.value = '';
+  images.value = [];
+  currentPage.value = 1;
+  viewedPages.value = [1];
+
+  try {
+    const arrayBuffer = await pdfFile.value.arrayBuffer();
+    
+    // Cargar documento PDF
+    const pdf = await pdfjsLib.value.getDocument({ 
+      data: arrayBuffer 
+    }).promise;
+    
+    const numPages = pdf.numPages;
+    const convertedImages: string[] = [];
+
+    console.log(`Procesando PDF con ${numPages} páginas...`);
+
+    // Procesar cada página
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      progreso.value = `Procesando página ${pageNum} de ${numPages}`;
+      
+      const page = await pdf.getPage(pageNum);
+      
+      // Calcular escala para buena calidad
+      const viewport = page.getViewport({ scale: 2.0 });
+      
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      
+      if (!context) {
+        throw new Error('No se pudo obtener el contexto del canvas');
+      }
+
+      // Configurar canvas
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+
+      // Renderizar página en canvas
+      await page.render({
+        canvasContext: context,
+        viewport: viewport
+      }).promise;
+
+      // Convertir a JPEG con calidad configurada
+      const quality = calidad.value / 100;
+      const imageData = canvas.toDataURL('image/jpeg', quality);
+      convertedImages.push(imageData.split(',')[1]); // Extraer solo base64
+
+      // Limpiar
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+
+    images.value = convertedImages;
+    console.log(`PDF convertido exitosamente: ${convertedImages.length} páginas`);
+    
+  } catch (err: any) {
+    console.error('Error procesando PDF:', err);
+    error.value = `Error al procesar PDF: ${err.message}`;
+  } finally {
+    loading.value = false;
+    progreso.value = '';
+  }
+};
+
+// Navegación
+const nextPage = () => {
+  if (currentPage.value < images.value.length) {
+    currentPage.value++;
+    markPageAsViewed(currentPage.value);
+    scrollToCurrentPage();
+  }
+};
+
+const previousPage = () => {
+  if (currentPage.value > 1) {
+    currentPage.value--;
+    markPageAsViewed(currentPage.value);
+    scrollToCurrentPage();
+  }
+};
+
+const firstPage = () => {
+  currentPage.value = 1;
+  markPageAsViewed(1);
+  scrollToCurrentPage();
+};
+
+const lastPage = () => {
+  currentPage.value = images.value.length;
+  markPageAsViewed(images.value.length);
+  scrollToCurrentPage();
+};
+
+const goToPage = (page: number) => {
+  currentPage.value = page;
+  markPageAsViewed(page);
+  scrollToCurrentPage();
+};
+
+const scrollToCurrentPage = () => {
+  const element = document.getElementById(`page-${currentPage.value}`);
+  if (element) {
+    element.scrollIntoView({ 
+      behavior: 'smooth', 
+      block: 'center' 
+    });
+  }
+};
+
+const markPageAsViewed = (page: number) => {
+  if (!viewedPages.value.includes(page)) {
+    viewedPages.value.push(page);
+  }
+};
+
+// Eventos de imagen
+const onImageLoad = (event: Event) => {
+  const img = event.target as HTMLImageElement;
+  console.log(`Imagen cargada: ${img.naturalWidth} x ${img.naturalHeight}`);
+};
+
+const onImageError = (event: Event) => {
+  const img = event.target as HTMLImageElement;
+  console.error('Error cargando imagen:', img.src.substring(0, 100));
+  error.value = 'Error cargando una de las páginas';
+};
+
+// Acciones
+const descargarImagen = () => {
+  if (images.value.length === 0) return;
+
+  const currentImage = images.value[currentPage.value - 1];
+  const link = document.createElement('a');
+  link.href = `data:image/jpeg;base64,${currentImage}`;
+  link.download = `pagina-${currentPage.value}-${pdfFileName.value}.jpg`;
+  link.click();
+};
+
+const reiniciar = () => {
+  pdfFile.value = null;
+  pdfFileName.value = '';
+  images.value = [];
+  currentPage.value = 1;
+  viewedPages.value = [];
+  error.value = '';
+  
+  // Reset file input
+  const fileInput = document.getElementById('pdfFile') as HTMLInputElement;
+  if (fileInput) {
+    fileInput.value = '';
+  }
+};
+</script>
+
+<style scoped>
+.logo {
+  height: 120px;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+
+/* Contenedor principal del flipbook */
+.flipbook-simple {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 25px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 15px;
+  border: 3px solid #e9ecef;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+/* Estilos de página individual */
+.page-simple {
+  background: white;
+  border: 2px solid #dee2e6;
+  border-radius: 12px;
+  padding: 25px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  margin: 0 auto;
+  max-width: 800px;
+  min-height: 500px;
+  position: relative;
+  transition: all 0.3s ease;
+  border-left: 8px solid #007bff;
+}
+
+.page-simple.active {
+  border-color: #007bff;
+  box-shadow: 0 12px 35px rgba(0, 123, 255, 0.25);
+  transform: translateY(-5px);
+}
+
+.page-simple.page-odd {
+  border-left-color: #28a745;
+}
+
+.page-simple.page-even {
+  border-left-color: #6f42c1;
+}
+
+/* Encabezado de página */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 15px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #f8f9fa;
+}
+
+.page-number {
+  background: #007bff;
+  color: white;
+  padding: 6px 15px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.document-title {
+  color: #6c757d;
+  font-size: 14px;
+  font-style: italic;
+}
+
+/* Contenido de página */
+.page-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+}
+
+.page-content img {
+  max-width: 100%;
+  max-height: 500px;
+  height: auto;
+  display: block;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Pie de página */
+.page-footer {
+  text-align: center;
+  padding-top: 15px;
+  margin-top: 20px;
+  border-top: 1px solid #f8f9fa;
+}
+
+/* Controles de navegación */
+.navigation-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 15px;
+  margin: 20px 0;
+  padding: 15px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.page-indicator {
+  background: linear-gradient(135deg, #007bff, #0056b3);
+  color: white;
+  padding: 8px 20px;
+  border-radius: 25px;
+  font-weight: bold;
+  min-width: 100px;
+  text-align: center;
+}
+
+/* Sección de miniaturas */
+.thumbnails-section {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.thumbnails {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 15px;
+  justify-content: flex-start;
+  scrollbar-width: thin;
+  scrollbar-color: #007bff #f8f9fa;
+}
+
+.thumbnails::-webkit-scrollbar {
+  height: 8px;
+}
+
+.thumbnails::-webkit-scrollbar-track {
+  background: #f8f9fa;
+  border-radius: 10px;
+}
+
+.thumbnails::-webkit-scrollbar-thumb {
+  background: #007bff;
+  border-radius: 10px;
+}
+
+/* Miniaturas individuales */
+.thumbnail {
+  width: 70px;
+  height: 100px;
+  border: 3px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.thumbnail:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 5px 15px rgba(0, 123, 255, 0.3);
+}
+
+.thumbnail.active {
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px #007bff;
+}
+
+.thumbnail.viewed:not(.active) {
+  border-color: #28a745;
+}
+
+.thumbnail-image-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumbnail-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.thumbnail:hover .thumbnail-overlay {
+  opacity: 1;
+}
+
+.thumbnail-number {
+  background: #007bff;
+  color: white;
+  border-radius: 50%;
+  width: 25px;
+  height: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+/* Botones de acción */
+.action-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .container {
+    padding: 10px;
+  }
+
+  .flipbook-simple {
+    padding: 15px;
+    gap: 15px;
+  }
+
+  .page-simple {
+    padding: 15px;
+    margin: 0 5px;
+    min-height: 400px;
+  }
+
+  .page-content {
+    min-height: 300px;
+  }
+
+  .page-content img {
+    max-height: 350px;
+  }
+
+  .navigation-controls {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .thumbnails {
+    justify-content: flex-start;
+    padding: 10px;
+  }
+
+  .thumbnail {
+    width: 60px;
+    height: 85px;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+  }
+
+  .action-buttons .btn {
+    margin-bottom: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-header {
+    flex-direction: column;
+    gap: 10px;
+    text-align: center;
+  }
+
+  .page-content img {
+    max-height: 250px;
+  }
+
+  .thumbnail {
+    width: 50px;
+    height: 70px;
+  }
+}
+
+/* Animaciones */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-simple {
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* Estados de carga */
+.spinner-border {
+  width: 1rem;
+  height: 1rem;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Mejoras visuales adicionales */
+.card {
+  border: none;
+  border-radius: 15px;
+}
+
+.form-range::-webkit-slider-thumb {
+  background: #007bff;
+}
+
+.form-range::-moz-range-thumb {
+  background: #007bff;
+}
+
+.badge {
+  font-size: 0.9em;
+}
+
+.text-primary {
+  color: #007bff !important;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #007bff, #0056b3);
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0, 123, 255, 0.4);
 }
 </style>
