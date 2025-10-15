@@ -971,7 +971,11 @@ const crearLibro = async () => {
       // Convertir a JPEG con calidad configurada
       const quality = calidad.value / 100;
       const imageData = canvas.toDataURL('image/jpeg', quality);
-      convertedImages.push(imageData.split(',')[1]); // Extraer solo base64
+      const parts = imageData.split(',');
+      if (parts.length < 2 || !parts[1]) {
+        throw new Error('Formato de imagen inesperado al convertir a base64');
+      }
+      convertedImages.push(parts[1]); // Extraer solo base64
 
       // Limpiar
       canvas.width = 0;
